@@ -1042,6 +1042,12 @@ impl App {
         self.resolved_bezel(self.playing_platform()) == BezelPick::Ags102
     }
 
+    /// A SNES picture is 4:3, so on a 4:3 panel it fills the screen instead of sitting in the GBA
+    /// SP's 3:2 frame. Choosing the AGS-102 bezel keeps the frame.
+    pub fn game_fills_panel(&self) -> bool {
+        self.framed_panel() && self.playing_platform() == Platform::Snes && !self.sp_frame()
+    }
+
     pub fn set_game_bezel(&mut self, tex: Option<TexId>) {
         self.game_bezel = tex;
     }
@@ -2635,6 +2641,7 @@ impl App {
             return IN_GAME_MENU;
         }
         match &self.phase {
+            Phase::Playing { .. } if self.game_fills_panel() => Layout::Native,
             Phase::Playing { .. } | Phase::Polaroids { .. } => Layout::Framed,
             Phase::Ejecting { .. } if self.overlay_slide() > 0.0 => Layout::Framed,
             Phase::Doze { cart: Some(_) } => Layout::Framed,

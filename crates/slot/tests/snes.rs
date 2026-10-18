@@ -139,3 +139,45 @@ fn every_menu_row_has_an_answer_while_a_snes_game_plays() {
     assert_eq!(values[QuickRow::ColourCorrection.index()], None);
     assert!(values[QuickRow::Shader.index()].is_some());
 }
+
+fn playing_on(root: &Path, panel: (u32, u32)) -> Session {
+    let mut s = session_playing(root);
+    s.app_mut().set_panel(panel);
+    s
+}
+
+#[test]
+fn a_snes_game_fills_a_four_by_three_panel() {
+    let d = snes_root(&["Mario", "Zelda"]);
+    let s = playing_on(d.path(), (640, 480));
+    assert!(s.app().game_fills_panel());
+    assert_eq!(s.app().layout(), slot_ui::Layout::Native);
+}
+
+#[test]
+fn a_snes_game_keeps_the_sp_frame_when_its_bezel_is_chosen() {
+    let d = snes_root(&["Mario", "Zelda"]);
+    let mut state = slot_store::read_slot_state(d.path());
+    state.bezel_snes = slot_store::BezelPick::Ags102;
+    slot_store::write_slot_state(d.path(), &state).expect("write slot.state");
+    let s = playing_on(d.path(), (640, 480));
+    assert!(!s.app().game_fills_panel(), "the chosen frame was dropped");
+    assert_eq!(s.app().layout(), slot_ui::Layout::Framed);
+}
+
+#[test]
+fn only_a_snes_game_on_a_four_by_three_panel_fills_it() {
+    let d = snes_root(&["Mario", "Zelda"]);
+    let s = playing_on(d.path(), (720, 480));
+    assert!(
+        !s.app().game_fills_panel(),
+        "a 3:2 panel has no room to fill"
+    );
+    let d = common::tmp_root_with_gb_carts(&["Tetris", "Zzz"]);
+    let s = playing_on(d.path(), (640, 480));
+    assert!(
+        !s.app().game_fills_panel(),
+        "a Game Boy game left its frame"
+    );
+    assert_eq!(s.app().layout(), slot_ui::Layout::Framed);
+}

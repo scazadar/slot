@@ -38,6 +38,7 @@ pub struct Compositor {
     bezel: Option<gl::types::GLuint>,
     game_bezel: Option<TexId>,
     sp_frame: bool,
+    fills_panel: bool,
     turn: Option<Turn>,
 }
 
@@ -106,6 +107,7 @@ impl Compositor {
                 bezel: None,
                 game_bezel: None,
                 sp_frame: true,
+                fills_panel: false,
                 turn: None,
             })
         }
@@ -198,6 +200,12 @@ impl Compositor {
 
     pub fn set_sp_frame(&mut self, on: bool) {
         self.sp_frame = on;
+    }
+
+    /// The game takes the whole panel instead of its 3:2 frame. Only a native layout has the
+    /// panel's own size to fill, so this is read there alone.
+    pub fn set_game_fills_panel(&mut self, on: bool) {
+        self.fills_panel = on;
     }
 
     fn draw_game_bezel(&mut self) {
@@ -491,6 +499,16 @@ impl Compositor {
     fn in_game_rect(&mut self, draw: impl FnOnce(&mut Self)) {
         if !self.native() {
             return draw(self);
+        }
+        if self.fills_panel {
+            let (w, h) = self.size;
+            let fbo = [w as f32 / OUT_W as f32, h as f32 / OUT_H as f32];
+            self.game.set_fbo_scale(fbo[0], fbo[1]);
+            self.game.set_crop(fbo[0] / fbo[1]);
+            unsafe { gl::Viewport(0, 0, w as i32, h as i32) };
+            draw(self);
+            self.game.set_crop(1.0);
+            return;
         }
         let (w, h) = canvas_size(self.window);
         self.game
