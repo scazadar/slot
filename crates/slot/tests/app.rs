@@ -1945,9 +1945,12 @@ fn the_picture_mode_is_remembered_per_cart() {
     let mut s = session_playing(d.path());
     s.feed([RawEvent::Down(Btn::L1)], 100);
     s.feed([RawEvent::Up(Btn::L1)], 120);
-    assert_eq!(video_mode_for(d.path(), "Tetris"), VideoMode::Stretch);
     assert_eq!(
-        video_mode_for(d.path(), "Zzz"),
+        video_mode_for(d.path(), "Tetris", Platform::Gb),
+        VideoMode::Stretch
+    );
+    assert_eq!(
+        video_mode_for(d.path(), "Zzz", Platform::Gb),
         VideoMode::Actual,
         "the press was recorded against another cart as well"
     );
@@ -1960,7 +1963,10 @@ fn the_picture_mode_is_remembered_per_cart() {
         "the cart did not come back stretched"
     );
     s.feed([RawEvent::Down(Btn::R1)], 100);
-    assert_eq!(video_mode_for(d.path(), "Tetris"), VideoMode::Actual);
+    assert_eq!(
+        video_mode_for(d.path(), "Tetris", Platform::Gb),
+        VideoMode::Actual
+    );
     assert_eq!(s.app().source_rect(), WHOLE_TEXTURE);
 }
 
@@ -1971,7 +1977,10 @@ fn a_cart_with_no_line_reads_as_actual_size() {
         !d.path().join(VIDEO_MODE_FILE).exists(),
         "the fixture already wrote the file"
     );
-    assert_eq!(video_mode_for(d.path(), "Tetris"), VideoMode::Actual);
+    assert_eq!(
+        video_mode_for(d.path(), "Tetris", Platform::Gb),
+        VideoMode::Actual
+    );
 
     let s = session_playing(d.path());
     assert_eq!(

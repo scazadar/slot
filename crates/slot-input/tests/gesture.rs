@@ -623,3 +623,40 @@ fn menu_dpad_display_chord_resets_when_menu_is_released() {
     g.feed(Down(Menu), 300);
     assert_eq!(g.tick(300 + MENU_HOLD_MS), vec![Eject]);
 }
+
+fn snes() -> Gestures {
+    let mut g = Gestures::new();
+    g.set_triggers_to_game(true);
+    g
+}
+
+#[test]
+fn a_snes_game_gets_the_triggers_for_turbo() {
+    let mut g = snes();
+    assert_eq!(g.feed(Down(L2), 0), vec![GbaDown(L2)]);
+    assert_eq!(g.feed(Up(L2), 50), vec![GbaUp(L2)]);
+    assert_eq!(g.feed(Down(R2), 100), vec![GbaDown(R2)]);
+    assert_eq!(g.feed(Up(R2), 150), vec![GbaUp(R2)]);
+}
+
+#[test]
+fn under_select_the_triggers_rewind_and_fast_forward_a_snes_game() {
+    let mut g = snes();
+    assert!(g.feed(Down(Select), 0).is_empty());
+    assert_eq!(g.feed(Down(L2), 50), vec![RewindStart]);
+    assert_eq!(g.feed(Up(L2), 900), vec![RewindStop]);
+    assert_eq!(g.feed(Down(R2), 950), vec![FfStart]);
+    assert_eq!(g.feed(Up(R2), 1900), vec![FfStop]);
+    assert!(
+        g.feed(Up(Select), 2000).is_empty(),
+        "the chord's SELECT reached the game"
+    );
+}
+
+#[test]
+fn a_game_boy_keeps_its_palette_chords_on_the_triggers() {
+    let mut g = Gestures::new();
+    g.feed(Down(Select), 0);
+    assert_eq!(g.feed(Down(L2), 50), vec![PalettePrev]);
+    assert!(g.feed(Up(L2), 60).is_empty());
+}

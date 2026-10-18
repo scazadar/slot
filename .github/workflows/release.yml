@@ -36,6 +36,7 @@ jobs:
           file "$out/System/slot" | grep -q aarch64
           file "$out/System/mgba_libretro.so" | grep -q aarch64
           file "$out/System/gpsp_libretro.so" | grep -q aarch64
+          file "$out/System/snes9x2005_plus_libretro.so" | grep -q aarch64
           test -x "$out/System/slot"
           gpsp_src_sha="$(cat vendor/gpsp-src.sha)"
           test -f "$out/System/licenses/gpsp-${gpsp_src_sha}.tar.gz"
@@ -43,6 +44,10 @@ jobs:
           for p in cores/gpsp/*.patch; do
             test -f "$out/System/licenses/gpsp-$(basename "$p")"
           done
+          snes9x_src_sha="$(cat vendor/snes9x2005-src.sha)"
+          test -f "$out/System/licenses/snes9x2005-${snes9x_src_sha}.tar.gz"
+          test -f "$out/System/licenses/snes9x2005-${snes9x_src_sha}.meta"
+          test -f "$out/System/licenses/snes9x2005-copyright.txt"
           mgba_src_commit="$(grep '^commit=' vendor/mgba_libretro.so.meta | cut -d= -f2)"
           test -f "$out/System/licenses/mgba-${mgba_src_commit}.meta"
           for p in cores/mgba/*.patch; do
@@ -85,7 +90,7 @@ jobs:
           cat > notes.md <<NOTES
           Unzip and copy the contents of \`slot-${GITHUB_REF_NAME}/\` onto SD2.
 
-          Emulation by mGBA (MPL-2.0) and gpSP (GPL-2.0). Their licences, patches and gpSP's source are in \`System/licenses/\`.
+          Emulation by mGBA (MPL-2.0), gpSP (GPL-2.0) and snes9x2005 (the Snes9x licence, non-commercial use only, with GPL-2.0 parts). Their licences, patches and the gpSP and snes9x2005 sources are in \`System/licenses/\`.
           NOTES
           gh release create "$GITHUB_REF_NAME" "$ZIP" --repo "$GITHUB_REPOSITORY" \
             --title "$GITHUB_REF_NAME" --notes-file notes.md

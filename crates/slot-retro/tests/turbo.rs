@@ -1,7 +1,9 @@
-use slot_retro::ButtonMask;
+use slot_retro::{ButtonMask, TurboKeys};
 
 fn pressed(mask: u16, frames: std::ops::Range<u32>) -> Vec<u16> {
-    frames.map(|f| ButtonMask(mask).turbo(f).0).collect()
+    frames
+        .map(|f| ButtonMask(mask).turbo(f, TurboKeys::FaceXY).0)
+        .collect()
 }
 
 #[test]
@@ -29,8 +31,34 @@ fn held_a_stays_down_under_turbo() {
 fn other_buttons_pass_through_and_x_y_never_reach_the_core() {
     let held = ButtonMask::X | ButtonMask::Y | ButtonMask::RIGHT;
     for f in 0..6 {
-        let m = ButtonMask(held).turbo(f).0;
+        let m = ButtonMask(held).turbo(f, TurboKeys::FaceXY).0;
         assert_ne!(m & ButtonMask::RIGHT, 0);
         assert_eq!(m & (ButtonMask::X | ButtonMask::Y), 0);
     }
+}
+
+#[test]
+fn on_the_triggers_r2_pulses_a_and_l2_pulses_b() {
+    let (a, b) = (ButtonMask::A, ButtonMask::B);
+    let pulsed = |held: u16| -> Vec<u16> {
+        (0..6)
+            .map(|f| ButtonMask(held).turbo(f, TurboKeys::Triggers).0)
+            .collect()
+    };
+    assert_eq!(pulsed(ButtonMask::R2), vec![a, a, a, 0, 0, 0]);
+    assert_eq!(pulsed(ButtonMask::L2), vec![b, b, b, 0, 0, 0]);
+}
+
+#[test]
+fn a_snes_game_gets_x_and_y_and_never_the_triggers() {
+    let held = ButtonMask::X | ButtonMask::Y | ButtonMask::L2 | ButtonMask::R2;
+    for keys in [TurboKeys::FaceXY, TurboKeys::Triggers] {
+        let off = ButtonMask(held).without_turbo(keys).0;
+        assert_eq!(off & (ButtonMask::L2 | ButtonMask::R2), 0, "{keys:?}");
+    }
+    let snes = ButtonMask(held).turbo(0, TurboKeys::Triggers).0;
+    assert_eq!(
+        snes & (ButtonMask::X | ButtonMask::Y),
+        ButtonMask::X | ButtonMask::Y
+    );
 }

@@ -52,9 +52,11 @@ pub struct Shelf {
     shadow: Option<TexId>,
     gb_shadow: Option<TexId>,
     gbc_shadow: Option<TexId>,
+    snes_shadow: Option<TexId>,
     backing: Option<TexId>,
     gb_backing: Option<TexId>,
     gbc_backing: Option<TexId>,
+    snes_backing: Option<TexId>,
     shells: Vec<OnceLock<Option<GbShell>>>,
     clears: Vec<OnceLock<bool>>,
     starred: Vec<bool>,
@@ -79,9 +81,11 @@ impl Shelf {
             shadow: None,
             gb_shadow: None,
             gbc_shadow: None,
+            snes_shadow: None,
             backing: None,
             gb_backing: None,
             gbc_backing: None,
+            snes_backing: None,
             ride: 0.0,
             vel: 0.0,
             held: None,
@@ -143,6 +147,7 @@ impl Shelf {
         match shell {
             GbShell::Notched => self.gb_shadow = Some(face),
             GbShell::Rounded => self.gbc_shadow = Some(face),
+            GbShell::Snes => self.snes_shadow = Some(face),
         }
     }
 
@@ -154,6 +159,7 @@ impl Shelf {
         match shell {
             GbShell::Notched => self.gb_backing = Some(face),
             GbShell::Rounded => self.gbc_backing = Some(face),
+            GbShell::Snes => self.snes_backing = Some(face),
         }
     }
 
@@ -216,6 +222,7 @@ impl Shelf {
             None => self.backing,
             Some(GbShell::Notched) => self.gb_backing,
             Some(GbShell::Rounded) => self.gbc_backing,
+            Some(GbShell::Snes) => self.snes_backing,
         };
         [self.interiors.get(i).copied().flatten(), board]
     }
@@ -460,6 +467,7 @@ impl Shelf {
                     None => self.shadow,
                     Some(GbShell::Notched) => self.gb_shadow,
                     Some(GbShell::Rounded) => self.gbc_shadow,
+                    Some(GbShell::Snes) => self.snes_shadow,
                 };
                 if let Some(tex) = backing {
                     out.push(Draw::Tex {
@@ -477,6 +485,7 @@ impl Shelf {
                     None => self.backing,
                     Some(GbShell::Notched) => self.gb_backing,
                     Some(GbShell::Rounded) => self.gbc_backing,
+                    Some(GbShell::Snes) => self.snes_backing,
                 };
                 let gba = self.shell(i).is_none();
                 // A GBA cart's board and back shell fill the cart's box, exactly where the

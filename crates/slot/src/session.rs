@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use slot_input::{Action, Gestures, Millis, RawEvent};
-use slot_retro::Rumble;
+use slot_retro::{Rumble, TurboKeys};
 use slot_store::Platform;
 use slot_ui::FfState;
 
@@ -466,8 +466,9 @@ impl Session {
         launch(&format!("opening {stem} on {}", core.as_str()));
         self.app.set_core(core);
         self.app.set_platform(platform);
-        self.app
-            .set_video_mode(crate::video_mode::video_mode_for(&self.root, stem));
+        self.app.set_video_mode(crate::video_mode::video_mode_for(
+            &self.root, stem, platform,
+        ));
         self.app.set_link_loaded(serial);
         let resume = (!self.app.starting_clean())
             .then(|| persist::read_resume(&self.root, platform, core, stem))
@@ -496,6 +497,13 @@ impl Session {
         };
         emu.set_volume(self.app.output_volume());
         emu.set_driven(self.driven);
+        let snes = platform == Platform::Snes;
+        emu.set_turbo_keys(if snes {
+            TurboKeys::Triggers
+        } else {
+            TurboKeys::FaceXY
+        });
+        self.gestures.set_triggers_to_game(snes);
         self.app.set_snapshot(Box::new(emu.snapshot()));
         self.emu = Some(emu);
     }

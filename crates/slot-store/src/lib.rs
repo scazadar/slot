@@ -10,6 +10,7 @@ mod platform;
 mod ring;
 mod scan;
 mod slot_state;
+pub mod snes;
 mod stamp;
 
 pub use atomic::atomic_write;

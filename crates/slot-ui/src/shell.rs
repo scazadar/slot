@@ -52,6 +52,9 @@ pub const DMG_SHELL: Shell = shell([0x9a, 0x97, 0x8f], Finish::Solid);
 
 pub const DUAL_MODE_SHELL: Shell = shell([0x33, 0x30, 0x31], Finish::Solid);
 
+/// The light grey of a PAL cart, as sold in Germany, and of the Super Famicom's.
+pub const SNES_SHELL: Shell = shell([0xb4, 0xb4, 0xb6], Finish::Solid);
+
 pub const GB_CLEAR_SHELL: Shell = shell([0x7c, 0x7a, 0x8a], Finish::Translucent);
 
 const GB_CODES: &[(&str, Shell)] = &[
@@ -90,6 +93,7 @@ pub fn shell_for(cart: &Cart) -> Shell {
     match cart.platform {
         Platform::Gba => gba_shell_for(&gba_code(cart)),
         Platform::Gb | Platform::Gbc => gb_shell_for(&cart.rom),
+        Platform::Snes => SNES_SHELL,
     }
 }
 

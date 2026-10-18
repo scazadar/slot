@@ -132,6 +132,10 @@ impl Compositor {
         Ok(())
     }
 
+    pub fn set_game_canvas(&mut self, (w, h): (u32, u32)) {
+        self.game.set_canvas(w, h);
+    }
+
     pub fn upload_game(&mut self, xrgb8888: &[u8]) {
         self.game.upload(xrgb8888);
     }

@@ -49,10 +49,14 @@ pub enum QuickRow {
     GbaBezel,
     ScreenGbc,
     ScreenGb,
+    ScreenSnes,
+    SnesShader,
+    SnesBezel,
+    AspectRatio,
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 40] = [
+    pub const ALL: [QuickRow; 44] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Screen,
@@ -93,6 +97,10 @@ impl QuickRow {
         QuickRow::GbaBezel,
         QuickRow::ScreenGbc,
         QuickRow::ScreenGb,
+        QuickRow::ScreenSnes,
+        QuickRow::SnesShader,
+        QuickRow::SnesBezel,
+        QuickRow::AspectRatio,
     ];
 
     pub const MAIN: [QuickRow; 4] = [
@@ -111,8 +119,12 @@ impl QuickRow {
         QuickRow::DateTime,
     ];
 
-    pub const SCREEN: [QuickRow; 3] =
-        [QuickRow::ScreenGba, QuickRow::ScreenGbc, QuickRow::ScreenGb];
+    pub const SCREEN: [QuickRow; 4] = [
+        QuickRow::ScreenGba,
+        QuickRow::ScreenGbc,
+        QuickRow::ScreenGb,
+        QuickRow::ScreenSnes,
+    ];
 
     pub const SCREEN_GBA: [QuickRow; 3] = [
         QuickRow::GbaShader,
@@ -133,6 +145,8 @@ impl QuickRow {
         QuickRow::GbBezel,
     ];
 
+    pub const SCREEN_SNES: [QuickRow; 2] = [QuickRow::SnesShader, QuickRow::SnesBezel];
+
     pub const GAME: [QuickRow; 7] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
@@ -152,10 +166,11 @@ impl QuickRow {
 
     pub const SETTINGS: [QuickRow; 2] = [QuickRow::PlayScreen, QuickRow::PlayGameplay];
 
-    pub const PLAY_SCREEN: [QuickRow; 4] = [
+    pub const PLAY_SCREEN: [QuickRow; 5] = [
         QuickRow::Shader,
         QuickRow::ColourCorrection,
         QuickRow::Palette,
+        QuickRow::AspectRatio,
         QuickRow::Bezel,
     ];
 
@@ -165,7 +180,11 @@ impl QuickRow {
 
     pub fn page(self) -> &'static [QuickRow] {
         match self {
-            QuickRow::ScreenGba | QuickRow::ScreenGbc | QuickRow::ScreenGb => &QuickRow::SCREEN,
+            QuickRow::ScreenGba
+            | QuickRow::ScreenGbc
+            | QuickRow::ScreenGb
+            | QuickRow::ScreenSnes => &QuickRow::SCREEN,
+            QuickRow::SnesShader | QuickRow::SnesBezel => &QuickRow::SCREEN_SNES,
             QuickRow::GbaShader | QuickRow::GbaColourCorrection | QuickRow::GbaBezel => {
                 &QuickRow::SCREEN_GBA
             }
@@ -193,9 +212,11 @@ impl QuickRow {
                 &QuickRow::PLAY
             }
             QuickRow::PlayScreen | QuickRow::PlayGameplay => &QuickRow::SETTINGS,
-            QuickRow::Shader | QuickRow::ColourCorrection | QuickRow::Palette | QuickRow::Bezel => {
-                &QuickRow::PLAY_SCREEN
-            }
+            QuickRow::Shader
+            | QuickRow::ColourCorrection
+            | QuickRow::Palette
+            | QuickRow::AspectRatio
+            | QuickRow::Bezel => &QuickRow::PLAY_SCREEN,
             _ => &QuickRow::MAIN,
         }
     }
@@ -206,6 +227,7 @@ impl QuickRow {
             QuickRow::GbaShader => Some(QuickRow::ScreenGba),
             QuickRow::GbcShader => Some(QuickRow::ScreenGbc),
             QuickRow::GbShader => Some(QuickRow::ScreenGb),
+            QuickRow::SnesShader => Some(QuickRow::ScreenSnes),
             QuickRow::FastForward => Some(QuickRow::Game),
             QuickRow::Wallpaper => Some(QuickRow::General),
             QuickRow::PlayScreen => Some(QuickRow::Settings),
@@ -242,6 +264,7 @@ impl QuickRow {
             QuickRow::ScreenGba => Some(QuickRow::SCREEN_GBA[0]),
             QuickRow::ScreenGbc => Some(QuickRow::SCREEN_GBC[0]),
             QuickRow::ScreenGb => Some(QuickRow::SCREEN_GB[0]),
+            QuickRow::ScreenSnes => Some(QuickRow::SCREEN_SNES[0]),
             _ => None,
         }
     }
@@ -303,6 +326,10 @@ impl QuickRow {
             QuickRow::GbcBezel => "Bezel",
             QuickRow::GbaBezel => "Bezel",
             QuickRow::Bezel => "Bezel",
+            QuickRow::ScreenSnes => "Super Nintendo",
+            QuickRow::SnesShader => "Shader",
+            QuickRow::SnesBezel => "Bezel",
+            QuickRow::AspectRatio => "Aspect Ratio",
         }
     }
 
@@ -323,6 +350,7 @@ impl QuickRow {
                 | QuickRow::ScreenGba
                 | QuickRow::ScreenGbc
                 | QuickRow::ScreenGb
+                | QuickRow::ScreenSnes
         )
     }
 
@@ -357,10 +385,12 @@ pub enum QuickValue {
     Low,
     Medium,
     High,
+    Aspect43,
+    Aspect87,
 }
 
 impl QuickValue {
-    pub const ALL: [QuickValue; 18] = [
+    pub const ALL: [QuickValue; 20] = [
         QuickValue::Speed2,
         QuickValue::Speed3,
         QuickValue::Speed4,
@@ -379,6 +409,8 @@ impl QuickValue {
         QuickValue::Low,
         QuickValue::Medium,
         QuickValue::High,
+        QuickValue::Aspect43,
+        QuickValue::Aspect87,
     ];
 
     pub fn index(self) -> usize {
@@ -405,6 +437,8 @@ impl QuickValue {
             QuickValue::Low => "25%",
             QuickValue::Medium => "45%",
             QuickValue::High => "65%",
+            QuickValue::Aspect43 => "4:3",
+            QuickValue::Aspect87 => "8:7",
         }
     }
 
@@ -660,6 +694,7 @@ pub struct QuickMenu<'a> {
     pub gba_bezel: Option<[(TexId, u32, u32); 2]>,
     pub gb_bezel: Option<[(TexId, u32, u32); 2]>,
     pub gbc_bezel: Option<[(TexId, u32, u32); 2]>,
+    pub snes_bezel: Option<[(TexId, u32, u32); 2]>,
     pub bezel: Option<[(TexId, u32, u32); 2]>,
     pub over_game: bool,
     /// The carousel footer carries the legends, so the centred pair is not drawn.
@@ -722,6 +757,7 @@ impl QuickMenu<'_> {
                 QuickRow::GbaBezel => self.gba_bezel.map(|c| c[lit as usize]),
                 QuickRow::GbBezel => self.gb_bezel.map(|c| c[lit as usize]),
                 QuickRow::GbcBezel => self.gbc_bezel.map(|c| c[lit as usize]),
+                QuickRow::SnesBezel => self.snes_bezel.map(|c| c[lit as usize]),
                 QuickRow::Bezel => self.bezel.map(|c| c[lit as usize]),
                 _ => self.values[row.index()]
                     .and_then(|v| faces.values.get(v.index()))

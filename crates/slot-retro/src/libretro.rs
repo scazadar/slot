@@ -13,6 +13,7 @@ use crate::link::Link;
 use crate::rumble::Rumble;
 
 const VIDEO_BYTES: usize = (GBA_W * GBA_H * 4) as usize;
+const GBA_CANVAS: (usize, usize) = (GBA_W as usize, GBA_H as usize);
 
 static LIVE: AtomicBool = AtomicBool::new(false);
 
@@ -24,6 +25,7 @@ enum PixelFormat {
 
 struct Host {
     video: Vec<u8>,
+    canvas: (usize, usize),
     format: PixelFormat,
     audio: Vec<i16>,
     inputs: [u16; 2],
@@ -308,6 +310,37 @@ unsafe fn report_audio_status(skip: bool) {
     status(true, if skip { 0 } else { 100 }, skip);
 }
 
+/// A picture wider or taller than the canvas by half again is a hi-res or interlaced frame
+/// (SNES 512 wide, 448 tall). Each 2x1 or 2x2 block is averaged back to one pixel, which is
+/// also how hi-res pseudo-transparency was meant to look on a TV.
+fn fold(len: usize, room: usize) -> usize {
+    if len > room + room / 2 {
+        2
+    } else {
+        1
+    }
+}
+
+unsafe fn source_pixel(format: PixelFormat, row: *const u8, x: usize) -> [u32; 3] {
+    match format {
+        PixelFormat::Xrgb8888 => {
+            let p = row.add(x * 4);
+            [*p as u32, *p.add(1) as u32, *p.add(2) as u32]
+        }
+        PixelFormat::Rgb565 => {
+            let p = ptr::read_unaligned((row as *const u16).add(x));
+            let r = ((p >> 11) & 0x1f) as u32;
+            let g = ((p >> 5) & 0x3f) as u32;
+            let b = (p & 0x1f) as u32;
+            [
+                (b << 3) | (b >> 2),
+                (g << 2) | (g >> 4),
+                (r << 3) | (r >> 2),
+            ]
+        }
+    }
+}
+
 unsafe extern "C" fn video_refresh(
     data: *const c_void,
     width: c_uint,
@@ -318,33 +351,40 @@ unsafe extern "C" fn video_refresh(
         return;
     }
     with_host(|h| {
-        let cols = width.min(GBA_W) as usize;
-        let rows = height.min(GBA_H) as usize;
-        let ox = (GBA_W as usize - cols) / 2;
-        let oy = (GBA_H as usize - rows) / 2;
-        if cols != GBA_W as usize || rows != GBA_H as usize {
+        let (cw, ch) = h.canvas;
+        let (fx, fy) = (fold(width as usize, cw), fold(height as usize, ch));
+        let (pw, ph) = (width as usize / fx, height as usize / fy);
+        let cols = pw.min(cw);
+        let rows = ph.min(ch);
+        let ox = (cw - cols) / 2;
+        let oy = (ch - rows) / 2;
+        // A picture taller than the canvas, a SNES game in overscan, loses its top and bottom.
+        let (sx, sy) = ((pw - cols) / 2, (ph - rows) / 2);
+        if cols != cw || rows != ch {
             h.video.fill(0);
         }
+        let base = data as *const u8;
         for y in 0..rows {
-            let src = (data as *const u8).add(y * pitch);
-            let row = ((y + oy) * GBA_W as usize + ox) * 4;
-            match h.format {
-                PixelFormat::Xrgb8888 => {
-                    ptr::copy_nonoverlapping(src, h.video.as_mut_ptr().add(row), cols * 4);
-                }
-                PixelFormat::Rgb565 => {
-                    for x in 0..cols {
-                        let p = ptr::read_unaligned((src as *const u16).add(x));
-                        let r = ((p >> 11) & 0x1f) as u8;
-                        let g = ((p >> 5) & 0x3f) as u8;
-                        let b = (p & 0x1f) as u8;
-                        let o = row + x * 4;
-                        h.video[o] = (b << 3) | (b >> 2);
-                        h.video[o + 1] = (g << 2) | (g >> 4);
-                        h.video[o + 2] = (r << 3) | (r >> 2);
-                        h.video[o + 3] = 0;
+            let row = ((y + oy) * cw + ox) * 4;
+            let src = base.add((y + sy) * fy * pitch);
+            if (fx, fy) == (1, 1) && h.format == PixelFormat::Xrgb8888 {
+                ptr::copy_nonoverlapping(src.add(sx * 4), h.video.as_mut_ptr().add(row), cols * 4);
+                continue;
+            }
+            for x in 0..cols {
+                let mut sum = [0u32; 3];
+                for dy in 0..fy {
+                    for dx in 0..fx {
+                        let px = source_pixel(h.format, src.add(dy * pitch), (x + sx) * fx + dx);
+                        sum = [sum[0] + px[0], sum[1] + px[1], sum[2] + px[2]];
                     }
                 }
+                let n = (fx * fy) as u32;
+                let o = row + x * 4;
+                h.video[o] = (sum[0] / n) as u8;
+                h.video[o + 1] = (sum[1] / n) as u8;
+                h.video[o + 2] = (sum[2] / n) as u8;
+                h.video[o + 3] = 0;
             }
         }
     });
@@ -425,6 +465,13 @@ impl LibretroCore {
         self.host.asked_for_rumble
     }
 
+    /// The buffer every frame is centred in. GB and GBA share 240x160; a SNES picture needs
+    /// a wider one so the frame keeps the screen's 3:2.
+    pub fn set_canvas(&mut self, w: u32, h: u32) {
+        self.host.canvas = (w as usize, h as usize);
+        self.host.video = vec![0; (w * h * 4) as usize];
+    }
+
     pub fn set_option(&mut self, key: &str, value: &str) {
         if !self.host.declared.is_empty() {
             match self.host.declared.get(key) {
@@ -471,6 +518,7 @@ impl LibretroCore {
         }
         let mut host = Box::new(Host {
             video: vec![0; VIDEO_BYTES],
+            canvas: GBA_CANVAS,
             format: PixelFormat::Xrgb8888,
             audio: Vec::new(),
             inputs: [0; 2],
@@ -620,6 +668,10 @@ impl RetroCore for LibretroCore {
         &self.host.video
     }
 
+    fn canvas(&self) -> (u32, u32) {
+        (self.host.canvas.0 as u32, self.host.canvas.1 as u32)
+    }
+
     fn take_audio(&mut self) -> Vec<i16> {
         std::mem::take(&mut self.host.audio)
     }
@@ -709,6 +761,7 @@ mod tests {
     fn host_with(options: HashMap<String, CString>, options_dirty: bool) -> Box<Host> {
         Box::new(Host {
             video: vec![0; VIDEO_BYTES],
+            canvas: GBA_CANVAS,
             format: PixelFormat::Xrgb8888,
             audio: Vec::new(),
             inputs: [0; 2],
@@ -1713,5 +1766,88 @@ mod tests {
             &[100u8, 50, 100 ^ 50],
             "the picture was blanked or moved where a duplicate should have kept it"
         );
+    }
+
+    fn snes_host() -> Box<Host> {
+        let mut host = host_with(HashMap::new(), false);
+        host.canvas = (336, 224);
+        host.video = vec![0; 336 * 224 * 4];
+        host
+    }
+
+    fn rgb565(w: usize, h: usize, at: impl Fn(usize, usize) -> u16) -> Vec<u16> {
+        (0..h)
+            .flat_map(|y| (0..w).map(move |x| (x, y)))
+            .map(|(x, y)| at(x, y))
+            .collect()
+    }
+
+    #[test]
+    fn a_snes_picture_is_centred_in_its_wider_canvas() {
+        let mut host = snes_host();
+        host.format = PixelFormat::Rgb565;
+        let _active = Active::bind(&mut host);
+        let frame = rgb565(256, 224, |_, _| 0xffff);
+        unsafe { video_refresh(frame.as_ptr() as *const c_void, 256, 224, 256 * 2) };
+
+        let lit =
+            |x: usize, y: usize| unsafe { with_host(|h| h.video[(y * 336 + x) * 4]) }.unwrap() != 0;
+        assert!(
+            lit(40, 0) && lit(295, 223),
+            "the picture is not at x 40..296"
+        );
+        assert!(!lit(39, 0) && !lit(296, 0), "the side bars are not black");
+    }
+
+    #[test]
+    fn a_hi_res_snes_frame_is_averaged_down_to_256_wide() {
+        let mut host = snes_host();
+        host.format = PixelFormat::Rgb565;
+        let _active = Active::bind(&mut host);
+        // Alternate white and black columns: a pseudo-hires blend reads as mid grey.
+        let frame = rgb565(512, 224, |x, _| if x % 2 == 0 { 0xffff } else { 0 });
+        unsafe { video_refresh(frame.as_ptr() as *const c_void, 512, 224, 512 * 2) };
+
+        let px = unsafe { with_host(|h| h.video[(10 * 336 + 40) * 4..][..3].to_vec()) }.unwrap();
+        assert_eq!(
+            px,
+            vec![127, 127, 127],
+            "two hi-res columns did not blend into one"
+        );
+        let edge = unsafe { with_host(|h| h.video[(10 * 336 + 296) * 4]) }.unwrap();
+        assert_eq!(edge, 0, "the hi-res frame spilled past 256 columns");
+    }
+
+    #[test]
+    fn an_interlaced_snes_frame_is_halved_in_height() {
+        let mut host = snes_host();
+        let _active = Active::bind(&mut host);
+        let mut frame = vec![0u8; 512 * 448 * 4];
+        for (i, px) in frame.chunks_exact_mut(4).enumerate() {
+            if (i / 512) >= 224 {
+                px[..3].copy_from_slice(&[200, 200, 200]);
+            }
+        }
+        unsafe { video_refresh(frame.as_ptr() as *const c_void, 512, 448, 512 * 4) };
+
+        let at = |y: usize| unsafe { with_host(|h| h.video[(y * 336 + 100) * 4]) }.unwrap();
+        assert_eq!(at(111), 0, "the top half of the field moved down");
+        assert_eq!(
+            at(112),
+            200,
+            "the bottom half of the field is not at row 112"
+        );
+    }
+
+    #[test]
+    fn an_overscan_snes_frame_loses_its_top_and_bottom_rows() {
+        let mut host = snes_host();
+        let _active = Active::bind(&mut host);
+        let frame = gradient(256, 239);
+        unsafe { video_refresh(frame.as_ptr() as *const c_void, 256, 239, 256 * 4) };
+
+        let row = |y: usize| unsafe { with_host(|h| h.video[(y * 336 + 40) * 4 + 1]) }.unwrap();
+        assert_eq!(row(0), 7, "the first kept row is not source row 7");
+        assert_eq!(row(223), 230, "the last kept row is not source row 230");
     }
 }

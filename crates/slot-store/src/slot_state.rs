@@ -213,6 +213,7 @@ pub struct SlotState {
     pub shader_gba: Shader,
     pub shader_gb: Shader,
     pub shader_gbc: Shader,
+    pub shader_snes: Shader,
     pub eject_save: bool,
     pub turbo: bool,
     pub rewind: bool,
@@ -227,6 +228,7 @@ pub struct SlotState {
     pub bezel_gba: BezelPick,
     pub bezel_gb: BezelPick,
     pub bezel_gbc: BezelPick,
+    pub bezel_snes: BezelPick,
     pub recents: Vec<Recent>,
     pub favorites: Vec<Recent>,
     pub shelf: Option<String>,
@@ -279,6 +281,8 @@ pub enum Shader {
 impl Shader {
     pub const GBA: [Shader; 4] = [Shader::Off, Shader::Lcd3x, Shader::Grid, Shader::Dot];
     pub const GB: [Shader; 4] = [Shader::Off, Shader::Lcd3x, Shader::Grid, Shader::Simpletex];
+    /// A SNES drew on a TV, not an LCD, so it gets no LCD masks.
+    pub const SNES: [Shader; 3] = [Shader::Off, Shader::Grid, Shader::Dot];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -335,6 +339,7 @@ impl Default for SlotState {
             shader_gba: Shader::Grid,
             shader_gb: Shader::Simpletex,
             shader_gbc: Shader::Simpletex,
+            shader_snes: Shader::Off,
             eject_save: true,
             turbo: true,
             rewind: true,
@@ -349,6 +354,7 @@ impl Default for SlotState {
             bezel_gba: BezelPick::Ags102,
             bezel_gb: BezelPick::Ags102,
             bezel_gbc: BezelPick::Ags102,
+            bezel_snes: BezelPick::None,
             recents: Vec::new(),
             favorites: Vec::new(),
             shelf: None,
@@ -443,6 +449,8 @@ pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
     text.push_str(&format!("bezel_gba={}\n", s.bezel_gba.key()));
     text.push_str(&format!("bezel_gb={}\n", s.bezel_gb.key()));
     text.push_str(&format!("bezel_gbc={}\n", s.bezel_gbc.key()));
+    text.push_str(&format!("shader_snes={}\n", s.shader_snes.name()));
+    text.push_str(&format!("bezel_snes={}\n", s.bezel_snes.key()));
     text.push_str(&format!("shelf={}\n", s.shelf.as_deref().unwrap_or("")));
     text.push_str(&format!(
         "shelf_cart={}\n",
@@ -478,6 +486,7 @@ fn parse(text: &str) -> Option<SlotState> {
     let mut shader_gba = None;
     let mut shader_gb = None;
     let mut shader_gbc = None;
+    let mut shader_snes = None;
     let mut eject_save = None;
     let mut turbo = None;
     let mut rewind = None;
@@ -492,6 +501,7 @@ fn parse(text: &str) -> Option<SlotState> {
     let mut bezel_gba = None;
     let mut bezel_gb = None;
     let mut bezel_gbc = None;
+    let mut bezel_snes = None;
     let mut shelf = None;
     let mut shelf_cart = None;
     for line in text.lines().filter(|l| !l.is_empty()) {
@@ -531,10 +541,14 @@ fn parse(text: &str) -> Option<SlotState> {
             "bezel_gba" => bezel_gba = Some(BezelPick::parse(value)),
             "bezel_gb" => bezel_gb = Some(BezelPick::parse(value)),
             "bezel_gbc" => bezel_gbc = Some(BezelPick::parse(value)),
+            "bezel_snes" => bezel_snes = Some(BezelPick::parse(value)),
             "shelf" => shelf = Some(value.to_string()).filter(|v| !v.is_empty()),
             "shelf_cart" => shelf_cart = recent_value(value),
             "shader_gb" => shader_gb = Shader::parse(value).filter(|s| Shader::GB.contains(s)),
             "shader_gbc" => shader_gbc = Shader::parse(value).filter(|s| Shader::GB.contains(s)),
+            "shader_snes" => {
+                shader_snes = Shader::parse(value).filter(|s| Shader::SNES.contains(s))
+            }
             _ => {}
         }
     }
@@ -567,6 +581,7 @@ fn parse(text: &str) -> Option<SlotState> {
         shader_gba: shader_gba.unwrap_or(fallback.shader_gba),
         shader_gb: shader_gb.unwrap_or(fallback.shader_gb),
         shader_gbc: shader_gbc.or(shader_gb).unwrap_or(fallback.shader_gbc),
+        shader_snes: shader_snes.unwrap_or(fallback.shader_snes),
         eject_save: eject_save.unwrap_or(fallback.eject_save),
         turbo: turbo.unwrap_or(fallback.turbo),
         rewind: rewind.unwrap_or(fallback.rewind),
@@ -581,6 +596,7 @@ fn parse(text: &str) -> Option<SlotState> {
         bezel_gba: bezel_gba.unwrap_or(fallback.bezel_gba),
         bezel_gb: bezel_gb.unwrap_or(fallback.bezel_gb),
         bezel_gbc: bezel_gbc.unwrap_or(fallback.bezel_gbc),
+        bezel_snes: bezel_snes.unwrap_or(fallback.bezel_snes),
         recents: Vec::new(),
         favorites: Vec::new(),
         shelf,

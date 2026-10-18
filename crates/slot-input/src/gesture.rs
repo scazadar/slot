@@ -84,6 +84,9 @@ pub struct Gestures {
     r2_refused: bool,
     r2_last_release: Option<Millis>,
     rewinding: bool,
+    /// A SNES game takes the triggers for turbo, so rewind and fast forward move to
+    /// Select+L2 and Select+R2, where a Game Boy's palette chords are.
+    triggers_to_game: bool,
 }
 
 fn ramp_due(down: Option<Millis>, last: Option<Millis>, now: Millis) -> bool {
@@ -103,6 +106,10 @@ impl Gestures {
 
     pub fn set_menu_dpad_display(&mut self, enabled: bool) {
         self.menu_dpad_display = enabled;
+    }
+
+    pub fn set_triggers_to_game(&mut self, on: bool) {
+        self.triggers_to_game = on;
     }
 
     pub fn ff_latched(&self) -> bool {
@@ -178,7 +185,11 @@ impl Gestures {
         if let (true, Some((bit, action))) = (self.chording(now), chord(b)) {
             self.mark_chorded();
             self.chord_held |= bit;
-            return vec![action];
+            return match (self.triggers_to_game, b) {
+                (true, Btn::L2) => self.rewind_start(),
+                (true, Btn::R2) => self.ff_down(now),
+                _ => vec![action],
+            };
         }
         match b {
             Btn::Select => self.select_down(now),
@@ -190,8 +201,8 @@ impl Gestures {
             }
             Btn::Lid => vec![Action::LidClose],
             Btn::VolUp | Btn::VolDown => self.volume_press(b, now),
-            Btn::L2 => self.rewind_start(),
-            Btn::R2 => self.ff_down(now),
+            Btn::L2 if !self.triggers_to_game => self.rewind_start(),
+            Btn::R2 if !self.triggers_to_game => self.ff_down(now),
             _ => {
                 let mut out = self.hand_over_select(now);
                 out.push(Action::GbaDown(b));
@@ -204,7 +215,11 @@ impl Gestures {
         if let Some((bit, _)) = chord(b) {
             if self.chord_held & bit != 0 {
                 self.chord_held &= !bit;
-                return Vec::new();
+                return match (self.triggers_to_game, b) {
+                    (true, Btn::L2) => self.rewind_stop(),
+                    (true, Btn::R2) => self.ff_up(now),
+                    _ => Vec::new(),
+                };
             }
         }
         match b {
@@ -213,8 +228,8 @@ impl Gestures {
             Btn::Power => self.power_up(),
             Btn::Lid => vec![Action::LidOpen],
             Btn::VolUp | Btn::VolDown => self.volume_release(b),
-            Btn::L2 => self.rewind_stop(),
-            Btn::R2 => self.ff_up(now),
+            Btn::L2 if !self.triggers_to_game => self.rewind_stop(),
+            Btn::R2 if !self.triggers_to_game => self.ff_up(now),
             _ => vec![Action::GbaUp(b)],
         }
     }

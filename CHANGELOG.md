@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- SNES support: a Super Nintendo shelf for `.sfc` and `.smc` games in `Games/SNES`, run on snes9x2005_plus.
+- A SNES game opens at 4:3 and switches to pixel-exact 8:7 under Aspect Ratio in the in-game menu.
+- A SNES game gets X, Y, L and R. Its turbo moves to L2 / R2, and rewind and fast-forward to SELECT + L2 / R2.
+- SNES carts get their own grey Super Famicom style shell on the shelf.
+
 ## [1.7.0](https://github.com/BrandonKowalski/slot/releases/tag/v1.7.0)
 
 - The slot, carts and shelf now have a skeuomorphic effect, with light and dark themes and bundled wallpapers. Huge thanks to Markus for this amazing work! (#74, @MarkusMaribu)

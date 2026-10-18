@@ -109,7 +109,16 @@ fn the_rows_run_in_the_order_the_user_chose() {
     );
     assert_eq!(
         QuickRow::SCREEN.map(QuickRow::label),
-        ["Game Boy Advance", "Game Boy Color", "Game Boy"]
+        [
+            "Game Boy Advance",
+            "Game Boy Color",
+            "Game Boy",
+            "Super Nintendo"
+        ]
+    );
+    assert_eq!(
+        QuickRow::SCREEN_SNES.map(QuickRow::label),
+        ["Shader", "Bezel"]
     );
     assert_eq!(
         QuickRow::SCREEN_GBA.map(QuickRow::label),
@@ -152,7 +161,8 @@ fn the_rows_run_in_the_order_the_user_chose() {
             QuickRow::PlayGameplay,
             QuickRow::ScreenGba,
             QuickRow::ScreenGbc,
-            QuickRow::ScreenGb
+            QuickRow::ScreenGb,
+            QuickRow::ScreenSnes
         ]
     );
     for page in [
@@ -212,6 +222,8 @@ fn the_values_read_as_the_menu_prints_them() {
             "25%",
             "45%",
             "65%",
+            "4:3",
+            "8:7",
         ]
     );
     assert_eq!(QuickValue::flag(true), QuickValue::On);
@@ -324,6 +336,7 @@ fn the_in_game_pages_hold_their_rows_in_order() {
             QuickRow::Shader,
             QuickRow::ColourCorrection,
             QuickRow::Palette,
+            QuickRow::AspectRatio,
             QuickRow::Bezel
         ]
     );
@@ -381,7 +394,7 @@ fn in_game_rows_read_as_the_menu_shows_them() {
 
 #[test]
 fn a_hidden_palette_and_bezel_leave_two_screen_rows() {
-    let hidden = [QuickRow::Palette, QuickRow::Bezel];
+    let hidden = [QuickRow::Palette, QuickRow::AspectRatio, QuickRow::Bezel];
     assert_eq!(
         QuickRow::Shader.shown(&hidden),
         vec![QuickRow::Shader, QuickRow::ColourCorrection]
@@ -396,6 +409,7 @@ fn screen_opens_a_page_per_console_and_each_backs_out_to_its_console() {
         (QuickRow::ScreenGba, &QuickRow::SCREEN_GBA[..]),
         (QuickRow::ScreenGbc, &QuickRow::SCREEN_GBC[..]),
         (QuickRow::ScreenGb, &QuickRow::SCREEN_GB[..]),
+        (QuickRow::ScreenSnes, &QuickRow::SCREEN_SNES[..]),
     ] {
         assert_eq!(console.parent(), Some(QuickRow::Screen));
         assert_eq!(console.child(), Some(page[0]));
@@ -409,7 +423,7 @@ fn screen_opens_a_page_per_console_and_each_backs_out_to_its_console() {
 
 #[test]
 fn screen_rows_in_game_sit_in_a_panel_at_the_bottom() {
-    let hidden = [QuickRow::Palette];
+    let hidden = [QuickRow::Palette, QuickRow::AspectRatio];
     let shader = slot_ui::quick_row_top(QuickRow::Shader, &hidden);
     let colour = slot_ui::quick_row_top(QuickRow::ColourCorrection, &hidden);
     assert_eq!(colour - shader, slot_ui::QUICK_PITCH);

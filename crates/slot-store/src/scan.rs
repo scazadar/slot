@@ -25,8 +25,13 @@ impl Cart {
                     self.code = code;
                 }
             }
-            _ => {
+            Platform::Gb | Platform::Gbc => {
                 if let Some(title) = crate::gb::title(&self.rom) {
+                    self.title = title;
+                }
+            }
+            Platform::Snes => {
+                if let Some(title) = crate::snes::title(&self.rom) {
                     self.title = title;
                 }
             }

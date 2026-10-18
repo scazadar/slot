@@ -23,22 +23,45 @@ impl ButtonMask {
     pub const X: u16 = 1 << 9;
     pub const L: u16 = 1 << 10;
     pub const R: u16 = 1 << 11;
+    pub const L2: u16 = 1 << 12;
+    pub const R2: u16 = 1 << 13;
 
-    pub fn without_turbo(self) -> ButtonMask {
-        ButtonMask(self.0 & !(Self::X | Self::Y))
+    pub fn without_turbo(self, keys: TurboKeys) -> ButtonMask {
+        let (a, b) = keys.bits();
+        ButtonMask(self.0 & !(a | b | Self::L2 | Self::R2))
     }
 
-    pub fn turbo(self, frame: u32) -> ButtonMask {
-        let mut mask = self.0 & !(Self::X | Self::Y);
+    pub fn turbo(self, frame: u32, keys: TurboKeys) -> ButtonMask {
+        let (a, b) = keys.bits();
+        let mut mask = self.without_turbo(keys).0;
         if (frame / 3).is_multiple_of(2) {
-            if self.0 & Self::X != 0 {
+            if self.0 & a != 0 {
                 mask |= Self::A;
             }
-            if self.0 & Self::Y != 0 {
+            if self.0 & b != 0 {
                 mask |= Self::B;
             }
         }
         ButtonMask(mask)
+    }
+}
+
+/// Which two buttons fire A and B over and over. A Game Boy or GBA game has no use for X and
+/// Y; a SNES game does, so its turbo moves to the triggers.
+#[derive(Copy, Clone, Default, PartialEq, Eq, Debug)]
+pub enum TurboKeys {
+    #[default]
+    FaceXY,
+    Triggers,
+}
+
+impl TurboKeys {
+    /// The turbo A and turbo B buttons.
+    fn bits(self) -> (u16, u16) {
+        match self {
+            TurboKeys::FaceXY => (ButtonMask::X, ButtonMask::Y),
+            TurboKeys::Triggers => (ButtonMask::R2, ButtonMask::L2),
+        }
     }
 }
 
@@ -84,6 +107,10 @@ pub trait RetroCore: Send {
     fn set_option(&mut self, _key: &str, _value: &str) {}
     fn set_frame_skip(&mut self, _skip: bool) {}
     fn video_xrgb8888(&self) -> &[u8];
+    /// The size of the picture `video_xrgb8888` holds.
+    fn canvas(&self) -> (u32, u32) {
+        (GBA_W, GBA_H)
+    }
     fn take_audio(&mut self) -> Vec<i16>;
     fn serialize(&mut self) -> Result<Vec<u8>, CoreError>;
     fn unserialize(&mut self, data: &[u8]) -> Result<(), CoreError>;

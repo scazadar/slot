@@ -89,8 +89,8 @@ struct QuickPalette {
 struct BezelSync {
     tex: Option<TexId>,
     image: Option<(Console, BezelPick)>,
-    labels: [String; 3],
-    faces: [(Option<TexId>, Option<TexId>); 3],
+    labels: [String; 4],
+    faces: [(Option<TexId>, Option<TexId>); 4],
 }
 
 #[derive(Default)]
@@ -511,6 +511,7 @@ impl Frontend {
         compositor.set_screen_footer(self.session.app().screen_footer());
         compositor.set_overlay_slide(self.session.app().overlay_slide());
         compositor.set_game_source_rect(self.session.app().source_rect());
+        compositor.set_game_canvas(self.session.app().game_canvas());
         self.grab_link_shot(compositor);
         compositor.begin_frame(self.session.app().layout());
         if self.draw_rebuild(compositor) {
@@ -793,11 +794,11 @@ impl UiFaces {
             quick_carets: [false, true].map(quick_caret_face),
             quick_legend: quick_legend_faces(footer_ink(false)),
             quick_legend_light: quick_legend_faces(footer_ink(true)),
-            sockets: slot_store::Core::ALL
+            sockets: slot_store::Core::PICKER
                 .iter()
                 .map(|c| socket_face(*c))
                 .collect(),
-            chips: slot_store::Core::ALL
+            chips: slot_store::Core::PICKER
                 .iter()
                 .map(|c| chip_face(Some(*c)))
                 .collect(),
@@ -959,10 +960,7 @@ fn sync_game_bezel(app: &mut App, compositor: &mut Compositor, state: &mut Bezel
     if app.quick_menu().is_none() && app.in_game_menu().is_none() {
         return;
     }
-    for (at, platform) in [Console::Gba, Console::Gb, Console::Gbc]
-        .into_iter()
-        .enumerate()
-    {
+    for (at, platform) in Console::ALL.into_iter().enumerate() {
         let label = app.resolved_bezel(platform).label();
         if state.labels[at] == label {
             continue;

@@ -200,5 +200,10 @@ fn a_line_naming_a_core_the_platform_cannot_run_is_dropped() {
 
 #[test]
 fn the_picker_board_has_exactly_two_sockets() {
-    assert_eq!(Core::ALL.len(), 2);
+    assert_eq!(Core::PICKER.len(), 2);
+    for core in Core::PICKER {
+        assert!(core.runs(Platform::Gba), "{core:?} sits on the GBA board");
+    }
+    assert!(!Core::Snes9x.runs(Platform::Gba));
+    assert!(!Core::Mgba.runs(Platform::Snes));
 }

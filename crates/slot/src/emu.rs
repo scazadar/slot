@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 
 use crate::cable::{self, Cable};
 use slot_retro::{
-    ButtonMask, CoreError, Link, LinkChannel, RetroCore, Rumble, GBA_H, GBA_W, NETPACKET_RELIABLE,
+    ButtonMask, CoreError, Link, LinkChannel, RetroCore, Rumble, TurboKeys, NETPACKET_RELIABLE,
 };
 use slot_store::RUN_AHEAD_MAX;
 
@@ -92,6 +92,7 @@ struct Shared {
     rewind: AtomicBool,
     rewind_fill: AtomicU8,
     turbo: AtomicBool,
+    turbo_triggers: AtomicBool,
     recording: AtomicBool,
     stop: AtomicBool,
     volume: AtomicU8,
@@ -151,7 +152,8 @@ impl EmuHandle {
     ) -> Self {
         let rumble = core.rumble();
         let link = core.net();
-        let frames = Frames::new((GBA_W * GBA_H * 4) as usize);
+        let (w, h) = core.canvas();
+        let frames = Frames::new((w * h * 4) as usize);
         let shared = Arc::new(Shared {
             input: AtomicU16::new(0),
             speed: AtomicU8::new(Speed::Paused as u8),
@@ -160,6 +162,7 @@ impl EmuHandle {
             rewind: AtomicBool::new(false),
             rewind_fill: AtomicU8::new(0),
             turbo: AtomicBool::new(true),
+            turbo_triggers: AtomicBool::new(false),
             recording: AtomicBool::new(true),
             stop: AtomicBool::new(false),
             volume: AtomicU8::new(100),
@@ -364,6 +367,12 @@ impl EmuHandle {
 
     pub fn set_rewinding(&self, on: bool) {
         self.shared.rewind.store(on, Ordering::Relaxed);
+    }
+
+    pub fn set_turbo_keys(&self, keys: TurboKeys) {
+        self.shared
+            .turbo_triggers
+            .store(keys == TurboKeys::Triggers, Ordering::Relaxed);
     }
 
     pub fn set_turbo(&self, on: bool) {
@@ -686,9 +695,13 @@ impl Worker {
                 loop {
                     ran += 1;
                     let last = ran >= ceiling || cost.last(began.elapsed(), budget);
+                    let keys = match self.shared.turbo_triggers.load(Ordering::Relaxed) {
+                        true => TurboKeys::Triggers,
+                        false => TurboKeys::FaceXY,
+                    };
                     let input = match self.shared.turbo.load(Ordering::Relaxed) {
-                        true => input.turbo(turbo_frame),
-                        false => input.without_turbo(),
+                        true => input.turbo(turbo_frame, keys),
+                        false => input.without_turbo(keys),
                     };
                     turbo_frame = turbo_frame.wrapping_add(1);
                     core.set_frame_skip(!last);
@@ -943,7 +956,7 @@ impl Worker {
                 let _ = reply.send(core.save_ram());
             }
             Cmd::Thumb(reply) => {
-                let _ = reply.send(crate::thumb::png(core.video_xrgb8888()));
+                let _ = reply.send(crate::thumb::png(core.video_xrgb8888(), core.canvas()));
             }
             Cmd::BeginLink(client_id, t) => {
                 self.shared.link_lost.store(false, Ordering::Relaxed);

@@ -9,12 +9,15 @@ pub enum Mould {
     Gba,
     Notched,
     Rounded,
+    Snes,
 }
 
 pub const GBA_CART_W: u32 = 360;
 pub const GBA_CART_H: u32 = 212;
 pub const GB_CART_W: u32 = 312;
 pub const GB_CART_H: u32 = 337;
+pub const SNES_CART_W: u32 = 360;
+pub const SNES_CART_H: u32 = 232;
 pub const BOARD_W: u32 = GBA_CART_W;
 pub const BOARD_H: u32 = GBA_CART_H;
 pub const SOCKET_W: u32 = 64;
@@ -35,9 +38,12 @@ pub const STICKER_H: u32 = 228;
 const GBA_CART_PNG: &[u8] = include_bytes!("../../../assets/gba_cart.png");
 const GB_CART_PNG: &[u8] = include_bytes!("../../../assets/gb_cart.png");
 const GBC_CART_PNG: &[u8] = include_bytes!("../../../assets/gbc_cart.png");
+const SNES_CART_PNG: &[u8] = include_bytes!("../../../assets/snes_cart.png");
 const GBA_INTERIOR_PNG: &[u8] = include_bytes!("../../../assets/gba_interior.png");
 const GB_INTERIOR_PNG: &[u8] = include_bytes!("../../../assets/gb_interior.png");
 const GBC_INTERIOR_PNG: &[u8] = include_bytes!("../../../assets/gbc_interior.png");
+const SNES_INTERIOR_PNG: &[u8] = include_bytes!("../../../assets/snes_interior.png");
+const SNES_BOARD_PNG: &[u8] = include_bytes!("../../../assets/snes_board.png");
 const GB_BOARD_PNG: &[u8] = include_bytes!("../../../assets/gb_board.png");
 const BOARD_PNG: &[u8] = include_bytes!("../../../assets/board.png");
 const SOCKET_PNG: &[u8] = include_bytes!("../../../assets/socket.png");
@@ -152,6 +158,21 @@ pub fn gbc_interior() -> &'static [u8] {
     load(GBC_INTERIOR_PNG, GB_CART_W, GB_CART_H, &P)
 }
 
+pub fn snes_cart() -> &'static [u8] {
+    static P: OnceLock<Vec<u8>> = OnceLock::new();
+    load(SNES_CART_PNG, SNES_CART_W, SNES_CART_H, &P)
+}
+
+pub fn snes_interior() -> &'static [u8] {
+    static P: OnceLock<Vec<u8>> = OnceLock::new();
+    load(SNES_INTERIOR_PNG, SNES_CART_W, SNES_CART_H, &P)
+}
+
+pub fn snes_board() -> &'static [u8] {
+    static P: OnceLock<Vec<u8>> = OnceLock::new();
+    load(SNES_BOARD_PNG, SNES_CART_W, SNES_CART_H, &P)
+}
+
 /// The Game Boy PCB, from `assets/gb_board.png`, drawn between the pak's back and front plastic.
 pub fn gb_board() -> &'static [u8] {
     static P: OnceLock<Vec<u8>> = OnceLock::new();
@@ -231,6 +252,8 @@ const GBC_SHELL_PNG: &[u8] = include_bytes!("../../../assets/gbc_neutral.png");
 const GBA_CLEAR_PNG: &[u8] = include_bytes!("../../../assets/gba_clear.png");
 const GB_CLEAR_PNG: &[u8] = include_bytes!("../../../assets/gb_neutral.png");
 const GBC_CLEAR_PNG: &[u8] = include_bytes!("../../../assets/gbc_clear.png");
+// The SNES cart is drawn by tools/snes_cart.py and, like the Game Boy pak, has no clear file.
+const SNES_SHELL_PNG: &[u8] = include_bytes!("../../../assets/snes_neutral.png");
 
 /// The neutral shell asset for a mould, opaque or the separate clear one. The game's colour is
 /// blended onto it by the caller.
@@ -241,6 +264,7 @@ pub fn shell_asset(mould: Mould, clear: bool) -> &'static [u8] {
     static GBA_CLEAR: OnceLock<Vec<u8>> = OnceLock::new();
     static GB_CLEAR: OnceLock<Vec<u8>> = OnceLock::new();
     static GBC_CLEAR: OnceLock<Vec<u8>> = OnceLock::new();
+    static SNES: OnceLock<Vec<u8>> = OnceLock::new();
     let (bytes, w, h, slot) = match (mould, clear) {
         (Mould::Gba, false) => (GBA_SHELL_PNG, GBA_CART_W, GBA_CART_H, &GBA),
         (Mould::Notched, false) => (GB_SHELL_PNG, GB_CART_W, GB_CART_H, &GB),
@@ -248,6 +272,7 @@ pub fn shell_asset(mould: Mould, clear: bool) -> &'static [u8] {
         (Mould::Gba, true) => (GBA_CLEAR_PNG, GBA_CART_W, GBA_CART_H, &GBA_CLEAR),
         (Mould::Notched, true) => (GB_CLEAR_PNG, GB_CART_W, GB_CART_H, &GB_CLEAR),
         (Mould::Rounded, true) => (GBC_CLEAR_PNG, GB_CART_W, GB_CART_H, &GBC_CLEAR),
+        (Mould::Snes, _) => (SNES_SHELL_PNG, SNES_CART_W, SNES_CART_H, &SNES),
     };
     load(bytes, w, h, slot)
 }

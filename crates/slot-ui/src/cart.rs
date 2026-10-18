@@ -55,6 +55,14 @@ pub const GBC_LABEL_Y: u32 = 110;
 pub const GBC_LABEL_W: u32 = 223;
 pub const GBC_LABEL_H: u32 = 199;
 
+/// The SNES cart's label well, as drawn by `tools/snes_cart.py`: x 45..315, y 8..102 of
+/// 360x232. A PAL label is a 103.5 x 36 mm strip across the top of the shell.
+pub const SNES_LABEL_X: u32 = 45;
+pub const SNES_LABEL_Y: u32 = 8;
+pub const SNES_LABEL_W: u32 = 270;
+pub const SNES_LABEL_H: u32 = 94;
+const SNES_LABEL_R: u32 = 10;
+
 const PAD: u32 = 10;
 const MAX_LINES: usize = 3;
 const MIN_PX: f32 = 10.0;
@@ -74,6 +82,25 @@ struct Spec {
     paint: &'static [u8],
 }
 
+impl Spec {
+    /// Whether (x, y) is on the label. A SNES label's corners are rounded like its well.
+    fn on_label(&self, x: u32, y: u32) -> bool {
+        let (lx, ly, lw, lh) = self.label;
+        if !(lx..lx + lw).contains(&x) || !(ly..ly + lh).contains(&y) {
+            return false;
+        }
+        let r = match self.mould {
+            Mould::Snes => SNES_LABEL_R as i64,
+            Mould::Gba | Mould::Notched | Mould::Rounded => return true,
+        };
+        let (x, y) = (i64::from(x - lx), i64::from(y - ly));
+        let (w, h) = (i64::from(lw), i64::from(lh));
+        let dx = (r - x).max(x - (w - 1 - r)).max(0);
+        let dy = (r - y).max(y - (h - 1 - r)).max(0);
+        dx * dx + dy * dy <= r * r
+    }
+}
+
 enum Shape {
     Gba,
     Gb(GbShell),
@@ -90,6 +117,7 @@ pub fn gb_shell_of(cart: &Cart) -> Option<GbShell> {
                 Class::Original | Class::DualMode => GbShell::Notched,
             },
         }),
+        Platform::Snes => Some(GbShell::Snes),
     }
 }
 
@@ -125,20 +153,23 @@ fn spec(shape: Shape) -> Spec {
             paint: bitmaps::gba_cart(),
         },
         Shape::Gb(shell) => Spec {
-            w: GB_CART_W,
-            h: GB_CART_H,
+            w: shell.size().0,
+            h: shell.size().1,
             label: match shell {
                 GbShell::Notched => (GB_LABEL_X, GB_LABEL_Y, GB_LABEL_W, GB_LABEL_H),
                 GbShell::Rounded => (GBC_LABEL_X, GBC_LABEL_Y, GBC_LABEL_W, GBC_LABEL_H),
+                GbShell::Snes => (SNES_LABEL_X, SNES_LABEL_Y, SNES_LABEL_W, SNES_LABEL_H),
             },
             mask: gb_cart_mask(shell),
             mould: match shell {
                 GbShell::Notched => Mould::Notched,
                 GbShell::Rounded => Mould::Rounded,
+                GbShell::Snes => Mould::Snes,
             },
             paint: match shell {
                 GbShell::Notched => bitmaps::gb_cart(),
                 GbShell::Rounded => bitmaps::gbc_cart(),
+                GbShell::Snes => bitmaps::snes_cart(),
             },
         },
     }
@@ -147,11 +178,13 @@ fn spec(shape: Shape) -> Spec {
 pub const SEATED_W: u32 = 240;
 const SEATED_H: u32 = 141;
 const GB_SEATED_H: u32 = 259;
+const SNES_SEATED_H: u32 = 155;
 
 pub fn seated_box(platform: Platform) -> (u32, u32) {
     match platform {
         Platform::Gba => (SEATED_W, SEATED_H),
         Platform::Gb | Platform::Gbc => (SEATED_W, GB_SEATED_H),
+        Platform::Snes => (SEATED_W, SNES_SEATED_H),
     }
 }
 
@@ -159,6 +192,7 @@ pub fn cart_box(platform: Platform) -> (u32, u32) {
     let s = spec(match platform {
         Platform::Gba => Shape::Gba,
         Platform::Gb | Platform::Gbc => Shape::Gb(GbShell::Notched),
+        Platform::Snes => Shape::Gb(GbShell::Snes),
     });
     (s.w, s.h)
 }
@@ -168,7 +202,8 @@ pub fn cart_shadow() -> CartFace {
 }
 
 pub fn gb_cart_shadow(shell: GbShell) -> CartFace {
-    shadow(GB_CART_W, GB_CART_H, gb_cart_mask(shell))
+    let (w, h) = shell.size();
+    shadow(w, h, gb_cart_mask(shell))
 }
 
 fn shadow(w: u32, h: u32, mask: &[u8]) -> CartFace {
@@ -206,6 +241,7 @@ pub fn cart_interior(cart: &Cart) -> CartFace {
             let src = match shell {
                 GbShell::Notched => bitmaps::gb_interior(),
                 GbShell::Rounded => bitmaps::gbc_interior(),
+                GbShell::Snes => bitmaps::snes_interior(),
             };
             (src, s.w, s.h, Some(s.mask))
         }
@@ -237,7 +273,11 @@ pub fn cart_backing(shell: Option<GbShell>) -> CartFace {
         };
     };
     let s = spec(Shape::Gb(shell));
-    let mut rgba = bitmaps::gb_board().to_vec();
+    let mut rgba = match shell {
+        GbShell::Snes => bitmaps::snes_board(),
+        GbShell::Notched | GbShell::Rounded => bitmaps::gb_board(),
+    }
+    .to_vec();
     for (px, cover) in rgba.chunks_exact_mut(4).zip(s.mask) {
         px[3] = ((px[3] as u32 * *cover as u32 + 127) / 255) as u8;
     }
@@ -379,6 +419,7 @@ pub fn neutral_shell(mould: Mould, clear: bool) -> Vec<u8> {
         Mould::Gba => Shape::Gba,
         Mould::Notched => Shape::Gb(GbShell::Notched),
         Mould::Rounded => Shape::Gb(GbShell::Rounded),
+        Mould::Snes => Shape::Gb(GbShell::Snes),
     };
     let s = spec(shape);
     assert_eq!(
@@ -442,6 +483,7 @@ fn dress(s: &Spec, rgba: &mut [u8]) {
         Mould::Gba => "GAME BOY ADVANCE",
         Mould::Notched => "GAME BOY",
         Mould::Rounded => "GAME BOY COLOR",
+        Mould::Snes => "SUPER NINTENDO",
     };
     stamp_console(rgba, s.w, s.h, title, y0);
 }
@@ -533,10 +575,9 @@ fn shell_face(s: &Spec, shell: &Shell) -> CartFace {
     // stays the grey of the asset. A clear shell is its own asset with real transparency: what the
     // compositor drew underneath (the board) shows through and stays put while the shell moves.
     // The label box stays opaque.
-    let (lx, ly, lw, lh) = s.label;
     for y in 0..s.h {
         for x in 0..s.w {
-            let on_label = (lx..lx + lw).contains(&x) && (ly..ly + lh).contains(&y);
+            let on_label = s.on_label(x, y);
             let i = ((y * s.w + x) * 4) as usize;
             if !on_label {
                 for c in 0..3 {
@@ -604,7 +645,7 @@ fn generated_label(s: &Spec, title: &str) -> Vec<u8> {
 
     if let Some(font) = text::label_font() {
         let (max_px, max_h) = match s.mould {
-            Mould::Gba => (lh as f32 / (MAX_LINES as f32 * 1.36), f32::INFINITY),
+            Mould::Gba | Mould::Snes => (lh as f32 / (MAX_LINES as f32 * 1.36), f32::INFINITY),
             Mould::Notched | Mould::Rounded => {
                 let room = (lh - 2 * PAD) as f32;
                 (room / MAX_LINES as f32, room)
@@ -640,6 +681,9 @@ fn paste_label(s: &Spec, face: &mut CartFace, label: &[u8]) {
             let src = ((y * lw + x) * 4) as usize;
             let a = label[src + 3] as u32;
             if a == 0 {
+                continue;
+            }
+            if !s.on_label(x + lx, y + ly) {
                 continue;
             }
             let d = (((y + ly) * s.w + x + lx) * 4) as usize;

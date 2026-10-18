@@ -362,7 +362,7 @@ pub struct App {
     quick_clock_faces: Option<[(TexId, u32, u32); 2]>,
     quick_wallpaper_faces: Option<[(TexId, u32, u32); 2]>,
     quick_palette_faces: Option<[(TexId, u32, u32); 2]>,
-    quick_bezel_faces: [Option<[(TexId, u32, u32); 2]>; 3],
+    quick_bezel_faces: [Option<[(TexId, u32, u32); 2]>; 4],
     game_bezel: Option<TexId>,
     in_game_menu: Option<QuickRow>,
     /// 0 while the pause footer is off the bottom, 1 when it sits in the carousel's place.
@@ -526,7 +526,7 @@ impl App {
             quick_clock_faces: None,
             quick_wallpaper_faces: None,
             quick_palette_faces: None,
-            quick_bezel_faces: [None, None, None],
+            quick_bezel_faces: [None; 4],
             game_bezel: None,
             in_game_menu: None,
             footer: 0.0,
@@ -836,16 +836,27 @@ impl App {
     }
 
     pub fn in_game_hidden(&self) -> &'static [QuickRow] {
-        let no_bezel = self.playing_platform() == Platform::Gba && !self.framed_panel();
+        use QuickRow::{AspectRatio, Bezel, ColourCorrection, ExitGame, Palette};
+        let no_bezel = !self.playing_platform().is_game_boy() && !self.framed_panel();
+        if self.playing_platform() == Platform::Snes {
+            // The SNES core has no colour correction, and its picture's shape is a menu row
+            // because its shoulders belong to the game.
+            return match (no_bezel, self.single_cart()) {
+                (false, false) => &[ColourCorrection, Palette],
+                (false, true) => &[ColourCorrection, Palette, ExitGame],
+                (true, false) => &[ColourCorrection, Palette, Bezel],
+                (true, true) => &[ColourCorrection, Palette, Bezel, ExitGame],
+            };
+        }
         match (self.palette_live, no_bezel, self.single_cart()) {
-            (true, false, false) => &[],
-            (true, false, true) => &[QuickRow::ExitGame],
-            (true, true, false) => &[QuickRow::Bezel],
-            (true, true, true) => &[QuickRow::Bezel, QuickRow::ExitGame],
-            (false, false, false) => &[QuickRow::Palette],
-            (false, false, true) => &[QuickRow::Palette, QuickRow::ExitGame],
-            (false, true, false) => &[QuickRow::Palette, QuickRow::Bezel],
-            (false, true, true) => &[QuickRow::Palette, QuickRow::Bezel, QuickRow::ExitGame],
+            (true, false, false) => &[AspectRatio],
+            (true, false, true) => &[AspectRatio, ExitGame],
+            (true, true, false) => &[AspectRatio, Bezel],
+            (true, true, true) => &[AspectRatio, Bezel, ExitGame],
+            (false, false, false) => &[Palette, AspectRatio],
+            (false, false, true) => &[Palette, AspectRatio, ExitGame],
+            (false, true, false) => &[Palette, AspectRatio, Bezel],
+            (false, true, true) => &[Palette, AspectRatio, Bezel, ExitGame],
         }
     }
 
@@ -868,15 +879,18 @@ impl App {
             (QuickRow::Bezel, Platform::Gba) => QuickRow::GbaBezel,
             (QuickRow::Bezel, Platform::Gb) => QuickRow::GbBezel,
             (QuickRow::Bezel, Platform::Gbc) => QuickRow::GbcBezel,
+            (QuickRow::Shader, Platform::Snes) => QuickRow::SnesShader,
+            (QuickRow::Bezel, Platform::Snes) => QuickRow::SnesBezel,
             (row, _) => row,
         }
     }
 
     pub fn quick_value(&self, row: QuickRow) -> Option<QuickValue> {
         match row {
-            QuickRow::Shader | QuickRow::ColourCorrection => {
-                self.quick_value(self.playing_row(row))
-            }
+            // A platform with no row of its own (a SNES game's colour correction) has no value.
+            QuickRow::Shader | QuickRow::ColourCorrection => Some(self.playing_row(row))
+                .filter(|played| *played != row)
+                .and_then(|played| self.quick_value(played)),
             QuickRow::FastForward => QuickValue::speed(self.state.ff_speed),
             QuickRow::FastForwardSound => Some(QuickValue::flag(self.state.ff_sound)),
             QuickRow::GbaColourCorrection => {
@@ -890,6 +904,11 @@ impl App {
             QuickRow::GbaShader => Some(shader_value(self.state.shader_gba)),
             QuickRow::GbShader => Some(shader_value(self.state.shader_gb)),
             QuickRow::GbcShader => Some(shader_value(self.state.shader_gbc)),
+            QuickRow::SnesShader => Some(shader_value(self.state.shader_snes)),
+            QuickRow::AspectRatio => Some(match self.video_mode {
+                VideoMode::Stretch => QuickValue::Aspect43,
+                VideoMode::Actual => QuickValue::Aspect87,
+            }),
             QuickRow::Rumble => Some(QuickValue::flag(self.state.rumble)),
             QuickRow::EjectSave => Some(QuickValue::flag(self.state.eject_save)),
             QuickRow::Turbo => Some(QuickValue::flag(self.state.turbo)),
@@ -935,6 +954,8 @@ impl App {
             | QuickRow::GbBezel
             | QuickRow::GbcBezel
             | QuickRow::GbaBezel
+            | QuickRow::ScreenSnes
+            | QuickRow::SnesBezel
             | QuickRow::Bezel => None,
         }
     }
@@ -962,7 +983,7 @@ impl App {
 
     pub fn bezel_files(&self, platform: Platform) -> Vec<String> {
         match platform {
-            Platform::Gba => Vec::new(),
+            Platform::Gba | Platform::Snes => Vec::new(),
             _ => self
                 .root()
                 .map(|root| crate::bezel::list(root, platform))
@@ -972,7 +993,7 @@ impl App {
 
     fn bezel_choices(&self, platform: Platform) -> Vec<BezelPick> {
         let mut choices = vec![BezelPick::None];
-        if platform != Platform::Gba {
+        if platform.is_game_boy() {
             choices.push(BezelPick::Default);
         }
         if self.framed_panel() {
@@ -987,6 +1008,7 @@ impl App {
             Platform::Gba => &mut self.state.bezel_gba,
             Platform::Gb => &mut self.state.bezel_gb,
             Platform::Gbc => &mut self.state.bezel_gbc,
+            Platform::Snes => &mut self.state.bezel_snes,
         }
     }
 
@@ -995,6 +1017,7 @@ impl App {
             Platform::Gba => &self.state.bezel_gba,
             Platform::Gb => &self.state.bezel_gb,
             Platform::Gbc => &self.state.bezel_gbc,
+            Platform::Snes => &self.state.bezel_snes,
         };
         match self.bezel_choices(platform).contains(pick) {
             true => pick.clone(),
@@ -1399,8 +1422,10 @@ impl App {
         video_mode::source_rect(self.platform, self.video_mode)
     }
 
+    /// A Game Boy has no shoulder buttons, so slot uses them to pick the picture's shape.
+    /// A GBA or SNES game needs them.
     fn slot_owns_the_shoulders(&self) -> bool {
-        matches!(self.phase, Phase::Playing { .. }) && self.platform != Platform::Gba
+        matches!(self.phase, Phase::Playing { .. }) && self.platform.is_game_boy()
     }
 
     pub fn taken_buttons(&self) -> &'static [Btn] {
@@ -1473,9 +1498,15 @@ impl App {
         self.state.rewind
     }
 
+    /// The size of the game texture, which the picture and source rects are fractions of.
+    pub fn game_canvas(&self) -> (u32, u32) {
+        self.platform.canvas()
+    }
+
     pub fn picture_rect(&self) -> [f32; 4] {
         let (w, h) = self.platform.picture();
-        let (sw, sh) = (slot_gfx::SRC_W as f32, slot_gfx::SRC_H as f32);
+        let (sw, sh) = self.game_canvas();
+        let (sw, sh) = (sw as f32, sh as f32);
         let (x, y) = ((sw - w as f32) / 2.0, (sh - h as f32) / 2.0);
         [x / sw, y / sh, (x + w as f32) / sw, (y + h as f32) / sh]
     }
@@ -1637,6 +1668,7 @@ impl App {
             Platform::Gba => self.state.shader_gba,
             Platform::Gb => self.state.shader_gb,
             Platform::Gbc => self.state.shader_gbc,
+            Platform::Snes => self.state.shader_snes,
         }
     }
 
@@ -1653,6 +1685,7 @@ impl App {
             Platform::Gba => self.state.colour_correction_gba,
             Platform::Gb => self.state.colour_correction_gb,
             Platform::Gbc => self.state.colour_correction_gbc,
+            Platform::Snes => false,
         }
     }
 
@@ -2018,7 +2051,8 @@ impl App {
             | QuickRow::General
             | QuickRow::ScreenGba
             | QuickRow::ScreenGbc
-            | QuickRow::ScreenGb => {
+            | QuickRow::ScreenGb
+            | QuickRow::ScreenSnes => {
                 if let Some(row) = row.child() {
                     let row = row.shown(self.hidden_rows())[0];
                     self.phase = Phase::QuickMenu { row };
@@ -2055,6 +2089,9 @@ impl App {
             | QuickRow::GbBezel
             | QuickRow::GbcBezel
             | QuickRow::GbaBezel
+            | QuickRow::SnesShader
+            | QuickRow::SnesBezel
+            | QuickRow::AspectRatio
             | QuickRow::Bezel => {}
         }
     }
@@ -2071,10 +2108,21 @@ impl App {
             self.persist();
             return;
         }
-        if let QuickRow::GbaBezel | QuickRow::GbBezel | QuickRow::GbcBezel = row {
+        if row == QuickRow::AspectRatio {
+            let to = match self.video_mode {
+                VideoMode::Stretch => VideoMode::Actual,
+                VideoMode::Actual => VideoMode::Stretch,
+            };
+            self.set_picture(to);
+            return;
+        }
+        if let QuickRow::GbaBezel | QuickRow::GbBezel | QuickRow::GbcBezel | QuickRow::SnesBezel =
+            row
+        {
             let platform = match row {
                 QuickRow::GbaBezel => Platform::Gba,
                 QuickRow::GbBezel => Platform::Gb,
+                QuickRow::SnesBezel => Platform::Snes,
                 _ => Platform::Gbc,
             };
             self.cycle_bezel(platform, right);
@@ -2140,6 +2188,13 @@ impl App {
                 }
                 s.shader_gbc = to;
             }
+            QuickRow::SnesShader => {
+                let to = s.shader_snes.step(&Shader::SNES, right);
+                if to == s.shader_snes {
+                    return;
+                }
+                s.shader_snes = to;
+            }
             QuickRow::Rumble => s.rumble = !s.rumble,
             QuickRow::EjectSave => s.eject_save = !s.eject_save,
             QuickRow::Turbo => s.turbo = !s.turbo,
@@ -2174,6 +2229,9 @@ impl App {
             | QuickRow::GbBezel
             | QuickRow::GbcBezel
             | QuickRow::GbaBezel
+            | QuickRow::ScreenSnes
+            | QuickRow::SnesBezel
+            | QuickRow::AspectRatio
             | QuickRow::Bezel => return,
         }
         self.persist();
@@ -2192,6 +2250,7 @@ impl App {
             Platform::Gba => (&mut self.state.shader_gba, &Shader::GBA[..]),
             Platform::Gb => (&mut self.state.shader_gb, &Shader::GB[..]),
             Platform::Gbc => (&mut self.state.shader_gbc, &Shader::GB[..]),
+            Platform::Snes => (&mut self.state.shader_snes, &Shader::SNES[..]),
         };
         *shader = shader.step(choices, right);
         let said = match *shader {
@@ -2244,6 +2303,7 @@ impl App {
                 Platform::Gba => QuickRow::GbaColourCorrection,
                 Platform::Gb => QuickRow::GbColourCorrection,
                 Platform::Gbc => QuickRow::GbcColourCorrection,
+                Platform::Snes => return true,
             };
             self.change_setting(row, true);
             let said = match self.colour_correction() {
@@ -2977,6 +3037,7 @@ impl App {
                 gba_bezel: self.quick_bezel_faces[bezel_slot(Platform::Gba)],
                 gb_bezel: self.quick_bezel_faces[bezel_slot(Platform::Gb)],
                 gbc_bezel: self.quick_bezel_faces[bezel_slot(Platform::Gbc)],
+                snes_bezel: self.quick_bezel_faces[bezel_slot(Platform::Snes)],
                 bezel: None,
                 over_game: false,
                 footer_legends: true,
@@ -3099,6 +3160,7 @@ impl App {
                 gba_bezel: None,
                 gb_bezel: None,
                 gbc_bezel: None,
+                snes_bezel: None,
                 bezel: self.quick_bezel_faces[bezel_slot(self.playing_platform())],
                 over_game: true,
                 footer_legends: false,
@@ -4666,5 +4728,6 @@ fn bezel_slot(platform: Platform) -> usize {
         Platform::Gba => 0,
         Platform::Gb => 1,
         Platform::Gbc => 2,
+        Platform::Snes => 3,
     }
 }

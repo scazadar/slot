@@ -13,6 +13,9 @@ pub const WHOLE_TEXTURE: [f32; 4] = [0.0, 0.0, 1.0, 1.0];
 pub struct GamePass {
     prog: gl::types::GLuint,
     game: gl::types::GLuint,
+    /// The game texture's size. GB and GBA frames are `SRC_W`x`SRC_H`; a SNES frame is wider.
+    canvas: (u32, u32),
+    u_src: gl::types::GLint,
     u_rect: gl::types::GLint,
     u_bright: gl::types::GLint,
     u_uv: gl::types::GLint,
@@ -46,15 +49,12 @@ impl GamePass {
             crate::gl::gray_format(),
             Some(&[255]),
         );
-        let (u_rect, u_bright, u_uv, u_mode, u_paper_size, u_pic, u_fbo, u_origin);
+        let (u_rect, u_bright, u_uv, u_mode, u_paper_size, u_pic, u_fbo, u_origin, u_src);
         unsafe {
             gl::UseProgram(prog);
             gl::Uniform1i(crate::gl::uniform_location(prog, "u_game"), 0);
-            gl::Uniform2f(
-                crate::gl::uniform_location(prog, "u_src"),
-                SRC_W as f32,
-                SRC_H as f32,
-            );
+            u_src = crate::gl::uniform_location(prog, "u_src");
+            gl::Uniform2f(u_src, SRC_W as f32, SRC_H as f32);
             gl::Uniform2f(
                 crate::gl::uniform_location(prog, "u_target"),
                 OUT_W as f32,
@@ -73,6 +73,8 @@ impl GamePass {
         Ok(GamePass {
             prog,
             game,
+            canvas: (SRC_W, SRC_H),
+            u_src,
             u_rect,
             u_bright,
             u_uv,
@@ -152,8 +154,25 @@ impl GamePass {
         self.src = rect;
     }
 
+    /// Sizes the game texture for the platform being played. A frame of any other size is
+    /// one still in flight from the previous game and is not uploaded.
+    pub fn set_canvas(&mut self, w: u32, h: u32) {
+        if self.canvas == (w, h) {
+            return;
+        }
+        self.canvas = (w, h);
+        let game = crate::gl::texture(w, h, gl::NEAREST, gl::CLAMP_TO_EDGE, gl::BGRA, None);
+        unsafe {
+            gl::DeleteTextures(1, &self.game);
+            gl::UseProgram(self.prog);
+            gl::Uniform2f(self.u_src, w as f32, h as f32);
+        }
+        self.game = game;
+    }
+
     pub fn upload(&mut self, xrgb8888: &[u8]) {
-        if xrgb8888.len() < (SRC_W * SRC_H * 4) as usize {
+        let (w, h) = self.canvas;
+        if xrgb8888.len() != (w * h * 4) as usize {
             return;
         }
         unsafe {
@@ -164,8 +183,8 @@ impl GamePass {
                 0,
                 0,
                 0,
-                SRC_W as i32,
-                SRC_H as i32,
+                w as i32,
+                h as i32,
                 gl::BGRA,
                 gl::UNSIGNED_BYTE,
                 xrgb8888.as_ptr() as *const std::ffi::c_void,
@@ -175,7 +194,7 @@ impl GamePass {
 
     pub fn draw(&self, quad: &Quad) {
         let src = match self.effect {
-            ScreenEffect::Grid => whole_scale_source(self.src, self.fbo_scale),
+            ScreenEffect::Grid => whole_scale_source(self.src, self.fbo_scale, self.canvas),
             _ => self.src,
         };
         self.draw_source(self.game, quad, src);
@@ -223,9 +242,9 @@ impl GamePass {
     }
 }
 
-fn whole_scale_source(src: [f32; 4], fbo: [f32; 2]) -> [f32; 4] {
-    let (x, w) = whole_scale(src[0], src[2], SRC_W as f32, OUT_W as f32 * fbo[0]);
-    let (y, h) = whole_scale(src[1], src[3], SRC_H as f32, OUT_H as f32 * fbo[1]);
+fn whole_scale_source(src: [f32; 4], fbo: [f32; 2], canvas: (u32, u32)) -> [f32; 4] {
+    let (x, w) = whole_scale(src[0], src[2], canvas.0 as f32, OUT_W as f32 * fbo[0]);
+    let (y, h) = whole_scale(src[1], src[3], canvas.1 as f32, OUT_H as f32 * fbo[1]);
     [x, y, w, h]
 }
 

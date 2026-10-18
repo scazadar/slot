@@ -12,6 +12,7 @@ use slot::session::Session;
 use slot_input::Millis;
 use slot_retro::{
     AvInfo, ButtonMask, CoreError, LibretroCore, LinkChannel, LoopbackLink, MockCore, RetroCore,
+    TurboKeys,
 };
 use slot_store::{write_selected_core, write_slot_state, Core, Platform, SlotState, RUN_AHEAD_MAX};
 
@@ -260,7 +261,7 @@ fn every_frame_of_a_present_gets_the_same_buttons_and_turbo_keeps_its_beat() {
         (0..6).any(|t| beat
             .iter()
             .zip(t..)
-            .all(|(&mask, f)| ButtonMask(mask) == held.turbo(f))),
+            .all(|(&mask, f)| ButtonMask(mask) == held.turbo(f, TurboKeys::FaceXY))),
         "turbo no longer flips once every 3 presents: {beat:?}"
     );
 }

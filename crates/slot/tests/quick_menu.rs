@@ -384,6 +384,7 @@ fn screen_opens_a_page_of_its_own_and_b_comes_back_to_it() {
     for want in [
         QuickRow::ScreenGbc,
         QuickRow::ScreenGb,
+        QuickRow::ScreenSnes,
         QuickRow::ScreenGba,
         QuickRow::ScreenGbc,
         QuickRow::ScreenGb,

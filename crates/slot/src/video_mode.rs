@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use slot_gfx::{SRC_H, SRC_W, WHOLE_TEXTURE};
+use slot_gfx::WHOLE_TEXTURE;
 use slot_store::{ini, Platform};
 
 pub const VIDEO_MODE_FILE: &str = "Config/video_mode.txt";
@@ -27,13 +27,21 @@ impl VideoMode {
             _ => None,
         }
     }
+
+    /// A SNES game starts at the 4:3 a TV gave it; everything else at its own pixels.
+    pub fn default_for(platform: Platform) -> VideoMode {
+        match platform {
+            Platform::Snes => VideoMode::Stretch,
+            _ => VideoMode::Actual,
+        }
+    }
 }
 
-pub fn video_mode_for(root: &Path, stem: &str) -> VideoMode {
+pub fn video_mode_for(root: &Path, stem: &str, platform: Platform) -> VideoMode {
     ini::value(root, VIDEO_MODE_FILE, stem)
         .as_deref()
         .and_then(VideoMode::parse)
-        .unwrap_or_default()
+        .unwrap_or_else(|| VideoMode::default_for(platform))
 }
 
 pub fn write_video_mode(root: &Path, stem: &str, mode: VideoMode) -> std::io::Result<()> {
@@ -41,10 +49,11 @@ pub fn write_video_mode(root: &Path, stem: &str, mode: VideoMode) -> std::io::Re
 }
 
 pub fn source_rect(platform: Platform, mode: VideoMode) -> [f32; 4] {
-    let (w, h) = platform.picture();
-    if mode == VideoMode::Actual || (w, h) == (SRC_W, SRC_H) {
+    let (cw, _) = platform.canvas();
+    let w = platform.stretched_width();
+    if mode == VideoMode::Actual || w >= cw {
         return WHOLE_TEXTURE;
     }
-    let x = SRC_W.saturating_sub(w) / 2;
-    [x as f32 / SRC_W as f32, 0.0, w as f32 / SRC_W as f32, 1.0]
+    let x = (cw - w) / 2;
+    [x as f32 / cw as f32, 0.0, w as f32 / cw as f32, 1.0]
 }
